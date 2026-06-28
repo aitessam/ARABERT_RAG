@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item -ItemType Directory -Path \"d:/per/proj/ArabicRAG/core\" -Force)",
+      "PowerShell(New-Item -ItemType File -Path \"d:/per/proj/ArabicRAG/core/__init__.py\" -Force)",
+      "PowerShell(Get-ChildItem -Path \"d:/per/proj/ArabicRAG/core\" | Select-Object Name; Write-Output \"---\"; \\(Get-Content \"d:/per/proj/ArabicRAG/core/chunker.py\" | Measure-Object -Line\\).Lines; Write-Output \"lines\")",
+      "PowerShell(\\(Get-Content \"d:/per/proj/ArabicRAG/core/embeddings.py\" | Measure-Object -Line\\).Lines; Write-Output \"lines in embeddings.py\"; Get-Content \"d:/per/proj/ArabicRAG/requirements.txt\" | Select-String \"faiss|sentence|e5\")",
+      "PowerShell(\\(Get-Content \"d:/per/proj/ArabicRAG/core/retriever.py\" | Measure-Object -Line\\).Lines; Write-Output \"lines\"; Get-ChildItem \"d:/per/proj/ArabicRAG/core\" | Select-Object Name)",
+      "PowerShell(\\(Get-Content \"d:/per/proj/ArabicRAG/core/llm.py\" | Measure-Object -Line\\).Lines; Write-Output \"lines\"; Get-ChildItem \"d:/per/proj/ArabicRAG/core\" | Select-Object Name)",
+      "PowerShell(@\\(\"backend/app/core/config.py\",\"backend/app/main.py\",\"backend/app/api/routes/documents.py\",\"backend/app/api/routes/query.py\"\\) | ForEach-Object { $lines = \\(Get-Content \"d:/per/proj/ArabicRAG/$_\" | Measure-Object -Line\\).Lines; \"$lines lines — $_\" })",
+      "PowerShell(\\(Get-Content \"d:/per/proj/ArabicRAG/frontend/app.py\" | Measure-Object -Line\\).Lines; Write-Output \"lines\")",
+      "PowerShell(@\\(\"README.md\", \".gitignore\"\\) | ForEach-Object { $lines = \\(Get-Content \"d:/per/proj/ArabicRAG/$_\" | Measure-Object -Line\\).Lines; \"$lines lines — $_\" })",
+      "Bash(Wait-Job -Id b9fol1lt4)",
+      "Bash(.venv/Scripts/python -c \"import fastapi, sentence_transformers, faiss, streamlit; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import fastapi, sentence_transformers, faiss, streamlit, openai, fitz, rank_bm25; print\\('All imports OK'\\)\")",
+      "Bash(Remove-Item \"d:\\\\per\\\\proj\\\\ArabicRAG\\\\frontend\\\\pages\\\\upload.py\" -Force)",
+      "Bash(Remove-Item \"d:\\\\per\\\\proj\\\\ArabicRAG\\\\frontend\\\\pages\\\\chat.py\" -Force)"
+    ]
+  }
+}
