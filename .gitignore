@@ -87,3 +87,9 @@ logs/
 
 # ── Streamlit ─────────────────────────────────────────────────────────────────
 .streamlit/secrets.toml
+
+# ── Qdrant local server ───────────────────────────────────────────────────────
+qdrant/
+qdrant.zip
+.qdrant-initialized
+storage/

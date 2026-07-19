@@ -92,7 +92,7 @@ class QueryResponse(BaseModel):
 
 def _get_retriever(request: Request) -> HybridRetriever:
     retriever = request.app.state.retriever
-    if retriever is None:
+    if retriever is None or not retriever.is_ready:
         raise HTTPException(
             status_code=404,
             detail=(

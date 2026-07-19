@@ -19,6 +19,7 @@ them as FastAPI dependencies — no module-level globals.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -63,54 +64,50 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Startup: initialise app.state, attempt to load persisted indexes.
-    Shutdown: nothing to clean up (FAISS is file-persisted, not a server).
+    Startup: connect to Qdrant, load embedding + reranker models, init LLM.
+    Shutdown: nothing to clean up (Qdrant is a separate process).
     """
-    # Initialise state slots so route handlers can always read them safely.
     app.state.store: EmbeddingsStore | None = None
     app.state.retriever: HybridRetriever | None = None
     app.state.llm: LLMClient | None = None
     app.state.processed_docs: list[str] = []
     app.state.total_chunks: int = 0
-    app.state.jobs: dict = {}          # job_id → status dict; resets on restart
+    app.state.jobs: dict = {}
+    app.state.ingest_lock = asyncio.Lock()
 
-    # ── Try loading persisted vector store ────────────────────────────────────
-    vs_dir = settings.vector_store_path
+    # ── Connect to Qdrant and load models ─────────────────────────────────────
     try:
-        store = EmbeddingsStore.load(str(vs_dir))
-        retriever = HybridRetriever.load(str(vs_dir), store=store)
+        store = EmbeddingsStore(
+            model_name=settings.embedding_model,
+            url=settings.qdrant_url,
+            port=settings.qdrant_port,
+            collection=settings.qdrant_collection,
+        )
+        retriever = HybridRetriever.load(store=store)
         app.state.store = store
         app.state.retriever = retriever
         app.state.total_chunks = store.total_vectors
-        app.state.processed_docs = list({
-            doc["source"] for doc in retriever._corpus
-        })
+        app.state.processed_docs = list({d["source"] for d in retriever._corpus})
         logger.info(
-            "Loaded persisted index: %d vectors across %d document(s).",
+            "Qdrant store ready: %d vectors across %d document(s).",
             store.total_vectors,
             len(app.state.processed_docs),
         )
-    except FileNotFoundError:
-        logger.info(
-            "No persisted index found at '%s' — pre-loading embedding model "
-            "(first-time download may take a few minutes). "
-            "Upload a PDF to begin.",
-            vs_dir,
-        )
-        # Eagerly load the model so the first upload is not blocked by a
-        # large HuggingFace download inside the background ingestion job.
-        store = EmbeddingsStore(model_name=settings.embedding_model)
-        retriever = HybridRetriever(store=store)
-        app.state.store = store
-        app.state.retriever = retriever
     except Exception as exc:
-        logger.warning("Could not load persisted index: %s", exc)
+        logger.error(
+            "Cannot connect to Qdrant at %s:%s — %s. "
+            "Ensure Qdrant is running and restart the server.",
+            settings.qdrant_url,
+            settings.qdrant_port,
+            exc,
+        )
 
     # ── Initialise LLM client ─────────────────────────────────────────────────
     try:
         app.state.llm = LLMClient(
             model=settings.openai_model,
             api_key=settings.openai_api_key or None,
+            base_url=settings.llm_base_url or None,
             max_tokens=settings.llm_max_tokens,
             temperature=settings.llm_temperature,
         )
@@ -172,9 +169,10 @@ async def health(request: Request) -> HealthResponse:
     Always returns HTTP 200.  Inspect retriever_ready and llm_ready to
     determine whether the system is fully operational.
     """
+    retriever = request.app.state.retriever
     return HealthResponse(
         status="ok",
-        retriever_ready=request.app.state.retriever is not None,
+        retriever_ready=(retriever is not None and retriever.is_ready),
         llm_ready=request.app.state.llm is not None,
         total_chunks=request.app.state.total_chunks,
         processed_documents=list(request.app.state.processed_docs),

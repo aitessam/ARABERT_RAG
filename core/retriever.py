@@ -63,7 +63,6 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_RERANKER = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 _RETRIEVER_FILE = "retriever.json"
-_STORE_FILE = "store.json"           # written by EmbeddingsStore.save()
 
 
 # ── Arabic stopwords ──────────────────────────────────────────────────────────
@@ -432,47 +431,37 @@ class HybridRetriever:
     @classmethod
     def load(
         cls,
-        directory: str | Path,
-        store: EmbeddingsStore,
+        directory: str | Path | None = None,
+        store: EmbeddingsStore | None = None,
         device: str | None = None,
     ) -> "HybridRetriever":
         """
-        Load a HybridRetriever from a saved directory.
+        Connect to Qdrant-backed store and rebuild the BM25 corpus.
 
-        Reads retriever.json for the reranker model name, then reconstructs
-        the BM25 corpus from store.json (the EmbeddingsStore metadata file).
+        Reads retriever.json for the reranker model name if *directory* is
+        given and the file exists; otherwise falls back to the default.
+        BM25 corpus is populated by scrolling all payloads from Qdrant.
 
         Parameters
         ----------
         directory:
-            Directory previously written by save() and EmbeddingsStore.save().
+            Optional directory to read retriever.json from.
         store:
-            A loaded EmbeddingsStore (call EmbeddingsStore.load() first).
+            A connected EmbeddingsStore instance.
         device:
             Torch device for the cross-encoder.
-
-        Raises
-        ------
-        FileNotFoundError
-            If retriever.json or store.json are missing.
         """
-        path = Path(directory)
-
-        retriever_path = path / _RETRIEVER_FILE
-        store_path = path / _STORE_FILE
-
-        for p in (retriever_path, store_path):
-            if not p.exists():
-                raise FileNotFoundError(f"Required file not found: {p}")
-
-        config = json.loads(retriever_path.read_text(encoding="utf-8"))
-        reranker_model = config.get("reranker_model", _DEFAULT_RERANKER)
+        reranker_model = _DEFAULT_RERANKER
+        if directory is not None:
+            config_path = Path(directory) / _RETRIEVER_FILE
+            if config_path.exists():
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                reranker_model = config.get("reranker_model", _DEFAULT_RERANKER)
 
         instance = cls(store=store, reranker_model=reranker_model, device=device)
 
-        # Reconstruct BM25 corpus from the EmbeddingsStore metadata file.
-        store_doc = json.loads(store_path.read_text(encoding="utf-8"))
-        instance._corpus = store_doc.get("chunks", [])
+        # Rebuild BM25 corpus by scrolling all existing Qdrant payloads.
+        instance._corpus = store.all_chunks()
         instance._rebuild_bm25()
 
         logger.info(

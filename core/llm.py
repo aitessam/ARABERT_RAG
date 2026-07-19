@@ -179,19 +179,23 @@ class LLMClient:
         self,
         model: str = _DEFAULT_MODEL,
         api_key: str | None = None,
+        base_url: str | None = None,
         max_tokens: int = _DEFAULT_MAX_TOKENS,
         temperature: float = _DEFAULT_TEMPERATURE,
     ) -> None:
         resolved_key = api_key or os.getenv("OPENAI_API_KEY")
         if not resolved_key:
             raise EnvironmentError(
-                "OpenAI API key not found. Set OPENAI_API_KEY in your environment "
+                "API key not found. Set OPENAI_API_KEY in your environment "
                 "or pass api_key= to LLMClient()."
             )
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
-        self._client = OpenAI(api_key=resolved_key)
+        self._client = OpenAI(
+            api_key=resolved_key,
+            base_url=base_url or None,   # None = default OpenAI endpoint
+        )
 
     # ── Public API ────────────────────────────────────────────────────────────
 

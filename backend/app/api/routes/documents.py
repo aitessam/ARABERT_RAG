@@ -103,29 +103,18 @@ def _sync_ingest(
     if not chunks:
         raise ValueError("Document produced no usable chunks after processing.")
 
-    store: EmbeddingsStore | None = app.state.store
-    retriever: HybridRetriever | None = app.state.retriever
+    store: EmbeddingsStore = app.state.store
+    retriever: HybridRetriever = app.state.retriever
 
-    if store is None:
-        store = EmbeddingsStore(model_name=settings.embedding_model)
-        retriever = HybridRetriever(store=store)
-    else:
-        # Remove stale entries so re-uploads are idempotent.
-        removed = store.remove_by_source(filename)
-        if removed:
-            retriever.remove_by_source(filename)
-            logger.info("Re-upload '%s': removed %d stale chunks.", filename, removed)
+    # Remove stale entries so re-uploads are idempotent.
+    removed = store.remove_by_source(filename)
+    if removed:
+        retriever.remove_by_source(filename)
+        logger.info("Re-upload '%s': removed %d stale chunks.", filename, removed)
 
     store.embed_chunks(chunks, show_progress=False)
     retriever.index_chunks(chunks)
-
-    vs_dir = settings.vector_store_path
-    store.save(str(vs_dir))
-    retriever.save(str(vs_dir))
-
-    # Hand back the (possibly new) store/retriever references so the async
-    # wrapper can update app.state in the event-loop thread.
-    app._ingest_result = (store, retriever)
+    # No save() needed — Qdrant persists automatically.
 
     return len(pages), len(chunks), store.total_vectors
 
@@ -142,13 +131,9 @@ async def _ingest_background(
         page_count, chunk_count, total = await asyncio.to_thread(
             _sync_ingest, app, filename, dest
         )
-        # Update shared state in the event-loop thread (safe — no race here
-        # because asyncio is single-threaded and we're back on the loop).
-        store, retriever = app._ingest_result
-        del app._ingest_result
-        app.state.store = store
-        app.state.retriever = retriever
-        app.state.total_chunks = store.total_vectors
+        # Update shared state on the event-loop thread (safe — asyncio is
+        # single-threaded and we're back on the loop at this point).
+        app.state.total_chunks = total
         if filename not in app.state.processed_docs:
             app.state.processed_docs.append(filename)
 

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # LLM
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    llm_base_url: str = ""          # leave blank for OpenAI; set for Groq/Mistral/etc.
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.1
 
@@ -46,6 +47,11 @@ class Settings(BaseSettings):
     # Storage
     vector_store_dir: str = "data/vector_store"
     raw_data_dir: str = "data/raw"
+
+    # Qdrant
+    qdrant_url: str = "localhost"
+    qdrant_port: int = 6333
+    qdrant_collection: str = "arabic_rag"
 
     # Upload limits
     max_upload_mb: int = 50

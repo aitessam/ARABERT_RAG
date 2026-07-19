@@ -17,7 +17,7 @@ sentence-transformers>=3.0.1
 # Models used:
 #   intfloat/multilingual-e5-large          (bi-encoder; "passage:"/"query:" prefixes required)
 #   cross-encoder/mmarco-mMiniLMv2-L12-H384-v1  (multilingual reranker)
-faiss-cpu>=1.12.0
+qdrant-client>=1.9.0
 
 # ── Sparse Retrieval (BM25) ─────────────────────────────────────────────────────
 rank-bm25>=0.2.2
