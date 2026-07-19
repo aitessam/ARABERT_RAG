@@ -132,7 +132,7 @@ Building a RAG system for Arabic is not a translation of an English pipeline. Ar
 | Arabic NLP | `pyarabic`, regex | Normalisation, stopwords |
 | Chunking | Custom (`ArabicChunker`) | Semantic sentence-boundary splitting |
 | Bi-encoder | `intfloat/multilingual-e5-large` | 1024-dim multilingual embeddings |
-| Dense index | FAISS `IndexFlatIP` | Exact cosine similarity search |
+| Dense index | Qdrant | Vector similarity search |
 | Sparse index | `BM25Okapi` (rank-bm25) | Arabic keyword matching |
 | Cross-encoder | `mmarco-mMiniLMv2-L12-H384-v1` | Multilingual reranking |
 | LLM | OpenAI GPT-4o | Grounded answer generation |
