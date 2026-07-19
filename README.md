@@ -61,18 +61,17 @@ Building a RAG system for Arabic is not a translation of an English pipeline. Ar
               │  "passage: "+text  │   │   Arabic tokenisation │
               │  → e5-large embed  │   │   stopword removal    │
               │  → L2 normalise    │   │   → BM25Okapi corpus  │
-              │  → FAISS FlatIP    │   └──────────┬────────────┘
+              │  → Qdrant upsert   │   └──────────┬────────────┘
               └────────┬───────────┘              │
                        │                          │
                        └────────────┬─────────────┘
-                                    │ save to disk
-                              ┌─────┴──────┐
-                              │ data/       │
-                              │  index.faiss│
-                              │  store.json │
-                              │  retriever  │
-                              │  .json      │
-                              └────────────┘
+                                    │ persist
+                              ┌─────┴──────────┐
+                              │ Qdrant          │
+                              │  collection     │
+                              │ + BM25 corpus   │
+                              │  (JSON on disk) │
+                              └────────────────┘
 ```
 
 ### Query pipeline
@@ -85,7 +84,7 @@ Building a RAG system for Arabic is not a translation of an English pipeline. Ar
                    │  ─────────────────  │   │  ───────────────────── │  │
                    │  "query: "+question │   │  Arabic tokenise        │  │
                    │  → e5-large embed  │   │  → BM25 score all docs  │  │
-                   │  → FAISS search    │   │  → top 10 by score      │  │
+                   │  → Qdrant search   │   │  → top 10 by score      │  │
                    │  → top 10 by       │   │  (zero-score excluded)  │  │
                    │    cosine sim      │   └──────────────┬──────────┘  │
                    └──────────┬──────────┘                 │             │
@@ -167,7 +166,7 @@ Fixed-size character splitting cuts in the middle of sentences. Semantic chunkin
 HTTP status codes are used semantically: 400 (bad input), 404 (no index yet), 422 (valid format, bad content), 503 (LLM unavailable). Callers can handle each case differently without parsing error strings.
 
 **8. Index persistence with startup reload**
-The FAISS index and BM25 corpus are saved to disk on every update. On server restart, they are reloaded in the lifespan hook. A simple system loses all processed documents on restart and requires re-ingestion.
+The Qdrant collection and BM25 corpus are persisted across restarts. Qdrant runs as a local server with its own storage directory; the BM25 corpus is saved to disk as JSON. On server restart, both are reloaded in the lifespan hook. A simple system loses all processed documents on restart and requires re-ingestion.
 
 **9. Hallucination guard**
 The system prompt mandates two specific refusal phrases (one Arabic, one English) when the context is insufficient. The `answered` boolean in the response is set by detecting those exact strings, not by heuristic text classification. The frontend surfaces a distinct warning state when `answered=False`.
@@ -180,8 +179,8 @@ The system prompt mandates two specific refusal phrases (one Arabic, one English
 ArabicRAG/
 ├── core/                         shared processing modules
 │   ├── chunker.py                Arabic-aware semantic chunker
-│   ├── embeddings.py             FAISS vector store + e5-large embeddings
-│   ├── retriever.py              hybrid BM25 + FAISS + cross-encoder
+│   ├── embeddings.py             Qdrant vector store + e5-large embeddings
+│   ├── retriever.py              hybrid BM25 + Qdrant + cross-encoder
 │   └── llm.py                   GPT-4o answer generation
 │
 ├── utils/
@@ -202,7 +201,7 @@ ArabicRAG/
 ├── data/
 │   ├── raw/                      uploaded PDFs (git-ignored)
 │   ├── processed/                intermediate outputs (git-ignored)
-│   └── vector_store/             FAISS index + JSON metadata (git-ignored)
+│   └── vector_store/             Qdrant collection + BM25 JSON metadata (git-ignored)
 │
 ├── tests/
 │   ├── backend/
@@ -444,11 +443,11 @@ All values are read from `.env`. Defaults are shown.
 | `LLM_MAX_TOKENS` | `1500` | Maximum tokens in the generated answer. |
 | `LLM_TEMPERATURE` | `0.1` | Sampling temperature. Keep low for factual answers. |
 | `EMBEDDING_MODEL` | `intfloat/multilingual-e5-large` | HuggingFace bi-encoder model. |
-| `VECTOR_STORE_DIR` | `data/vector_store` | Where FAISS index and metadata are saved. |
+| `VECTOR_STORE_DIR` | `data/vector_store` | Where Qdrant data and BM25 metadata are saved. |
 | `RAW_DATA_DIR` | `data/raw` | Where uploaded PDFs are stored. |
 | `CHUNK_MAX_TOKENS` | `400` | Target token count per chunk. |
 | `CHUNK_OVERLAP_TOKENS` | `60` | Overlap tokens between consecutive chunks. |
-| `TOP_K_DENSE` | `10` | FAISS candidates per query. |
+| `TOP_K_DENSE` | `10` | Qdrant candidates per query. |
 | `TOP_K_SPARSE` | `10` | BM25 candidates per query. |
 | `TOP_K_FINAL` | `5` | Final results after cross-encoder reranking. |
 | `PDF_HEADER_MARGIN` | `0.08` | Top fraction of page treated as header zone. |
@@ -462,4 +461,4 @@ All values are read from `.env`. Defaults are shown.
 - **Image-only PDFs** (scanned documents with no embedded text layer) are rejected. OCR support is not included. To process scanned PDFs, run them through an OCR tool such as Tesseract with Arabic language support before uploading.
 - **The BM25 job pool resets on server restart.** In-progress job status is stored in memory. A restarted server will have no record of jobs submitted before the restart. The underlying index files are persisted and reloaded correctly; only the job status dict is lost.
 - **The cross-encoder is English-trained.** `mmarco-mMiniLMv2-L12-H384-v1` is trained on the multilingual MS-MARCO dataset and handles Arabic reasonably, but an Arabic-specific cross-encoder would improve reranking precision on exclusively Arabic corpora.
-- **Single-worker deployment.** FAISS writes are not thread-safe if multiple uvicorn workers are used. Run with a single worker (`--workers 1`) or replace FAISS with a client-server vector database (Qdrant, Weaviate) for multi-worker deployments.
+- **Single-worker deployment.** Qdrant handles concurrent reads safely, but the BM25 corpus is held in memory and rebuilt on each ingestion. Running multiple uvicorn workers will cause each worker to maintain its own BM25 state. Use a single worker (`--workers 1`) unless you move BM25 state to a shared store.
