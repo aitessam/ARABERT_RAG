@@ -4,6 +4,19 @@ A hybrid retrieval-augmented generation (RAG) system for Arabic PDF documents. U
 
 ---
 
+## Screenshots
+
+**Upload and ingestion**
+![Upload tab showing PDF ingestion progress](docs/screenshots/upload.png)
+
+**Arabic query with page citations**
+![Arabic question answered in Arabic with inline page citations](docs/screenshots/query_arabic.png)
+
+**English query against Arabic document**
+![English question answered in English from an Arabic source document](docs/screenshots/query_english.png)
+
+---
+
 ## Why Arabic RAG is technically interesting
 
 Building a RAG system for Arabic is not a translation of an English pipeline. Arabic presents a set of challenges that require specific engineering decisions at every stage.
